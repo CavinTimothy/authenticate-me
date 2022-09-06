@@ -1,15 +1,58 @@
 'use strict';
-const {
-  Model
-} = require('sequelize');
-const { validator } = require('validator');
+const { Model, Op } = require('sequelize');
+const bcrypt = require('bcryptjs');
 module.exports = (sequelize, DataTypes) => {
   class User extends Model {
-    /**
-     * Helper method for defining associations.
-     * This method is not a part of Sequelize lifecycle.
-     * The `models/index` file will call this method automatically.
-     */
+    // ***JWT PAYLOAD OBJECT***
+    // Returns an object with only the User instance information
+    // that is safe to save to a JWT.
+    toSafeObject() {
+      const { id, username, email } = this; // Context will be the User instance.
+      return { id, username, email };
+    }
+    // ***PASSWORD VALIDATOR***
+    // Accepts a password string and returns true if there is a match with the
+    // User instance's hashed password. If there is no match, it returns false.
+    validatePassword(password) {
+      return bcrypt.compareSync(password, this.hashedPassword.toString());
+    }
+    // ***RETURN USER INFORMATION***
+    // Uses the currentUser scope to return a User with the specified id.
+    static getCurrentUserById(id) {
+      return User.scope("currentUser").findByPk(id);
+    }
+    // ***USER LOGIN**
+    // Accepts object with credential and password keys.
+    // Searches for a User with the specified credential (username or email).
+    // If user is found, validate password by passing it into .validatePassword.
+    // If password is valid, return using currentUser scope.
+    static async login({ credential, password }) {
+      const user = await User.scope('loginUser').findOne({
+        where: {
+          [Op.or]: {
+            username: credential,
+            email: credential
+          }
+        }
+      });
+      if (user && user.validatePassword(password)) {
+        return await User.scope('currentUser').findByPk(user.id);
+      }
+    }
+    // ***NEW USER SIGNUP***
+    // Accepts object with username, email, and password key.
+    // Hashes password using the bcryptjs's hashSync method.
+    // Create User with the username, email, and password.
+    // Return new user using currentUser scope.
+    static async signup({ username, email, password }) {
+      const hashedPassword = bcrypt.hashSync(password);
+      const user = await User.create({
+        username,
+        email,
+        hashedPassword
+      });
+      return await User.scope('currentUser').findByPk(user.id);
+    }
     static associate(models) {
       // define association here
     }
@@ -64,7 +107,7 @@ module.exports = (sequelize, DataTypes) => {
         }
       }
     },
-    password: {
+    hashedPassword: {
       type: DataTypes.STRING,
       allowNull: false,
       validate: {
@@ -78,6 +121,19 @@ module.exports = (sequelize, DataTypes) => {
   }, {
     sequelize,
     modelName: 'User',
+    defaultScope: {
+      attributes: {
+        exclude: ['hashedPassword', 'createdAt', 'updatedAt']
+      }
+    },
+    scopes: {
+      currentUser: {
+        attributes: { exclude: ['hashedPassword'] }
+      },
+      loginUser: {
+        attributes: {}
+      }
+    }
   });
   return User;
 };
