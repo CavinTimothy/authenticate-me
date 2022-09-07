@@ -1,5 +1,5 @@
 'use strict';
-const { Model, Op } = require('sequelize');
+const { Model, Op, Validator } = require('sequelize');
 const bcrypt = require('bcryptjs');
 module.exports = (sequelize, DataTypes) => {
   class User extends Model {
@@ -44,11 +44,13 @@ module.exports = (sequelize, DataTypes) => {
     // Hashes password using the bcryptjs's hashSync method.
     // Create User with the username, email, and password.
     // Return new user using currentUser scope.
-    static async signup({ username, email, password }) {
+    static async signup({ firstName, lastName, email, username, password }) {
       const hashedPassword = bcrypt.hashSync(password);
       const user = await User.create({
-        username,
+        firstName,
+        lastName,
         email,
+        username,
         hashedPassword
       });
       return await User.scope('currentUser').findByPk(user.id);
@@ -101,7 +103,7 @@ module.exports = (sequelize, DataTypes) => {
           msg: 'Username must be 3-30 characters long'
         },
         isNotEmail(val) {
-          if (validator.isEmail(val)) {
+          if (Validator.isEmail(val)) {
             throw new Error('Username must not be email');
           }
         }
